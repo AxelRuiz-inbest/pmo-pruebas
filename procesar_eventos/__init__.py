@@ -12,81 +12,68 @@ def obtener_inicio_fin_semana():
     fin = inicio + timedelta(days=6)
     return inicio.date(), fin.date()
 
-def main(req: func.HttpRequest) -> func.HttpResponse:
-    usuario = req.params.get('usuario')
-    if not usuario:
-        return func.HttpResponse("Falta el parámetro 'usuario'", status_code=400)
-
+def obtener_horas_desde_timelog(work_item_id):
     org = os.getenv("AZURE_ORG")
     pat = os.getenv("DEVOPS_PAT")
     api_version = "7.2-preview.1"
 
-    if not all([org, pat]):
-        return func.HttpResponse("Faltan variables de entorno requeridas", status_code=500)
-
-    url = f"https://extmgmt.dev.azure.com/{org}/_apis/ExtensionManagement/InstalledExtensions/TechsBCN/DevOps-TimeLog/Data/Scopes/Default/Current/Collections/TimeLogData/Documents"
-
     token = base64.b64encode(f":{pat}".encode()).decode()
+    url = f"https://extmgmt.dev.azure.com/{org}/_apis/ExtensionManagement/InstalledExtensions/TechsBCN/DevOps-TimeLog/Data/Scopes/Default/Current/Collections/TimeLogData/Documents"
     headers = {
         "Authorization": f"Basic {token}",
         "Accept": f"application/json;api-version={api_version}"
     }
 
-    try:
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            return func.HttpResponse(
-                json.dumps({"error": response.text, "status": response.status_code}, indent=2),
-                mimetype="application/json",
-                status_code=500
-            )
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        return 0
 
-        data = response.json()
-        logs = data if isinstance(data, list) else data.get("value", [])
-        inicio_semana, fin_semana = obtener_inicio_fin_semana()
+    data = response.json()
+    logs = data if isinstance(data, list) else data.get("value", [])
+    logs_filtrados = [log for log in logs if str(log.get("workItemId")) == str(work_item_id)]
 
-        filtrados = [
-            log for log in logs
-            if log.get("user") == usuario and
-            "date" in log and
-            inicio_semana <= datetime.fromisoformat(log["date"]).date() <= fin_semana
-        ]
+    total_minutos = sum(log.get("time", 0) for log in logs_filtrados)
+    total_horas = round(total_minutos / 60, 2)
+    return total_horas
 
-        if not filtrados:
-            return func.HttpResponse(
-                json.dumps({
-                    "mensaje": f"No se encontraron registros esta semana para '{usuario}'"
-                }, indent=2),
-                mimetype="application/json"
-            )
+def update_work_item_with_hours(work_item_id, horas_registradas):
+    org = os.getenv("AZURE_ORG")
+    project = os.getenv("AZ_PROYECTO")
+    pat = os.getenv("DEVOPS_PAT")
 
-        agrupado = defaultdict(list)
-        total = 0
+    auth_header = base64.b64encode(f":{pat}".encode()).decode()
+    headers = {
+        "Authorization": f"Basic {auth_header}",
+        "Content-Type": "application/json-patch+json"
+    }
 
-        for log in filtrados:
-            wid = str(log.get("workItemId"))
-            agrupado[wid].append({
-                "fecha": log.get("date"),
-                "tipo": log.get("type"),
-                "minutos": log.get("time"),
-                "nota": log.get("notes")
-            })
-            total += log.get("time", 0)
-
-        respuesta = {
-            "usuario": usuario,
-            "semana": {
-                "inicio": str(inicio_semana),
-                "fin": str(fin_semana)
-            },
-            "total_minutos": total,
-            "total_horas": round(total / 60, 2),
-            "tareas": agrupado
+    url = f"https://dev.azure.com/{org}/{project}/_apis/wit/workitems/{work_item_id}?api-version=7.0"
+    payload = [
+        {
+            "op": "add",
+            "path": "/fields/Custom.HorasRegistradas",
+            "value": horas_registradas
         }
+    ]
 
-        return func.HttpResponse(json.dumps(respuesta, indent=2), mimetype="application/json")
+    response = requests.patch(url, headers=headers, json=payload)
+    return response.status_code, response.text
+
+def main(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        body = req.get_json()
+        work_item_id = body.get("resource", {}).get("workItemId")
+
+        if not work_item_id:
+            return func.HttpResponse("Falta el ID del Work Item", status_code=400)
+
+        horas = obtener_horas_desde_timelog(work_item_id)
+        status, result = update_work_item_with_hours(work_item_id, horas)
+
+        if status == 200:
+            return func.HttpResponse(f"Horas actualizadas correctamente: {horas}", status_code=200)
+        else:
+            return func.HttpResponse(f"Error al actualizar Work Item: {result}", status_code=500)
 
     except Exception as e:
-        return func.HttpResponse(
-            json.dumps({"error": str(e)}), mimetype="application/json", status_code=500
-        )
+        return func.HttpResponse(f"Error: {str(e)}", status_code=500)
