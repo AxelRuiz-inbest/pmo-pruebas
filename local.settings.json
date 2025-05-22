@@ -1,9 +1,0 @@
-{
-  "IsEncrypted": false,
-  "Values": {
-    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
-    "FUNCTIONS_WORKER_RUNTIME": "python",
-    "AZURE_ORG": "inbest",
-    "DEVOPS_PAT": "aVVQb5k9hWmUr12AZl8g6XV9rtsnKGKBihU9tBEM8alymuJJiLB0JQQJ99BEACAAAAAbRvkPAAASAZDO1VMj"
-  }
-}
