@@ -3,58 +3,46 @@ import os
 import requests
 import base64
 import json
-from datetime import datetime, timedelta
-from collections import defaultdict
-
-def obtener_inicio_fin_semana():
-    hoy = datetime.utcnow()
-    inicio = hoy - timedelta(days=hoy.weekday())
-    fin = inicio + timedelta(days=6)
-    return inicio.date(), fin.date()
 
 def obtener_horas_desde_timelog(work_item_id):
     org = os.getenv("AZURE_ORG")
     pat = os.getenv("DEVOPS_PAT")
-    api_version = "7.2-preview.1"
 
     token = base64.b64encode(f":{pat}".encode()).decode()
-    url = f"https://extmgmt.dev.azure.com/{org}/_apis/ExtensionManagement/InstalledExtensions/TechsBCN/DevOps-TimeLog/Data/Scopes/Default/Current/Collections/TimeLogData/Documents"
     headers = {
         "Authorization": f"Basic {token}",
-        "Accept": f"application/json;api-version={api_version}"
+        "Accept": "application/json;api-version=7.2-preview.1"
     }
 
+    url = f"https://extmgmt.dev.azure.com/{org}/_apis/ExtensionManagement/InstalledExtensions/TechsBCN/DevOps-TimeLog/Data/Scopes/Default/Current/Collections/TimeLogData/Documents"
     response = requests.get(url, headers=headers)
+
     if response.status_code != 200:
         return 0
 
     data = response.json()
     logs = data if isinstance(data, list) else data.get("value", [])
-    logs_filtrados = [log for log in logs if str(log.get("workItemId")) == str(work_item_id)]
+    filtrados = [l for l in logs if str(l.get("workItemId")) == str(work_item_id)]
+    total = sum(l.get("time", 0) for l in filtrados)
+    return round(total / 60, 2)
 
-    total_minutos = sum(log.get("time", 0) for log in logs_filtrados)
-    total_horas = round(total_minutos / 60, 2)
-    return total_horas
-
-def update_work_item_with_hours(work_item_id, horas_registradas):
+def update_work_item_with_hours(work_item_id, horas):
     org = os.getenv("AZURE_ORG")
     project = os.getenv("AZ_PROYECTO")
     pat = os.getenv("DEVOPS_PAT")
 
-    auth_header = base64.b64encode(f":{pat}".encode()).decode()
+    token = base64.b64encode(f":{pat}".encode()).decode()
     headers = {
-        "Authorization": f"Basic {auth_header}",
+        "Authorization": f"Basic {token}",
         "Content-Type": "application/json-patch+json"
     }
 
     url = f"https://dev.azure.com/{org}/{project}/_apis/wit/workitems/{work_item_id}?api-version=7.0"
-    payload = [
-        {
-            "op": "add",
-            "path": "/fields/Custom.HorasRegistradas",
-            "value": horas_registradas
-        }
-    ]
+    payload = [{
+        "op": "add",
+        "path": "/fields/Horas Registrada",
+        "value": horas
+    }]
 
     response = requests.patch(url, headers=headers, json=payload)
     return response.status_code, response.text
