@@ -3,6 +3,7 @@ import os
 import requests
 import base64
 import json
+import logging
 
 def obtener_horas_desde_timelog(work_item_id):
     org = os.getenv("AZURE_ORG")
@@ -50,10 +51,12 @@ def update_work_item_with_hours(work_item_id, horas):
 def main(req: func.HttpRequest) -> func.HttpResponse:
     try:
         body = req.get_json()
-        work_item_id = body.get("resource", {}).get("workItemId")
+        logging.info(f"Payload recibido: {json.dumps(body)}")
+
+        work_item_id = body.get("resource", {}).get("id")
 
         if not work_item_id:
-            return func.HttpResponse("Falta el ID del Work Item", status_code=400)
+            return func.HttpResponse("Falta el ID del Work Item en resource.id", status_code=400)
 
         horas = obtener_horas_desde_timelog(work_item_id)
         status, result = update_work_item_with_hours(work_item_id, horas)
@@ -64,4 +67,5 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             return func.HttpResponse(f"Error al actualizar Work Item: {result}", status_code=500)
 
     except Exception as e:
+        logging.error(f"Error inesperado: {str(e)}")
         return func.HttpResponse(f"Error: {str(e)}", status_code=500)
