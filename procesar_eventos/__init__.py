@@ -3,12 +3,19 @@ import os
 import requests
 import base64
 import json
+from datetime import datetime, timedelta
 from collections import defaultdict
 
+def obtener_inicio_fin_semana():
+    hoy = datetime.utcnow()
+    inicio = hoy - timedelta(days=hoy.weekday())
+    fin = inicio + timedelta(days=6)
+    return inicio.date(), fin.date()
+
 def main(req: func.HttpRequest) -> func.HttpResponse:
-    workitem_id = req.params.get('id')
-    if not workitem_id:
-        return func.HttpResponse("Falta el parámetro 'id'", status_code=400)
+    usuario = req.params.get('usuario')
+    if not usuario:
+        return func.HttpResponse("Falta el parámetro 'usuario'", status_code=400)
 
     org = os.getenv("AZURE_ORG")
     pat = os.getenv("DEVOPS_PAT")
@@ -36,32 +43,48 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
         data = response.json()
         logs = data if isinstance(data, list) else data.get("value", [])
-        filtrados = [log for log in logs if str(log.get("workItemId")) == str(workitem_id)]
+        inicio_semana, fin_semana = obtener_inicio_fin_semana()
+
+        filtrados = [
+            log for log in logs
+            if log.get("user") == usuario and
+            "date" in log and
+            inicio_semana <= datetime.fromisoformat(log["date"]).date() <= fin_semana
+        ]
 
         if not filtrados:
             return func.HttpResponse(
-                json.dumps({"mensaje": f"No se encontraron registros para el Work Item {workitem_id}"}),
+                json.dumps({
+                    "mensaje": f"No se encontraron registros esta semana para '{usuario}'"
+                }, indent=2),
                 mimetype="application/json"
             )
 
-        total_min = sum(log.get("time", 0) for log in filtrados)
+        agrupado = defaultdict(list)
+        total = 0
 
-        agrupados = defaultdict(list)
         for log in filtrados:
-            agrupados[log.get("date")].append({
-                "usuario": log.get("user"),
+            wid = str(log.get("workItemId"))
+            agrupado[wid].append({
+                "fecha": log.get("date"),
                 "tipo": log.get("type"),
-                "minutos": log.get("time")
+                "minutos": log.get("time"),
+                "nota": log.get("notes")
             })
+            total += log.get("time", 0)
 
-        resultado = {
-            "workItemId": workitem_id,
-            "total_minutos": total_min,
-            "total_horas": round(total_min / 60, 2),
-            "logs_por_fecha": agrupados
+        respuesta = {
+            "usuario": usuario,
+            "semana": {
+                "inicio": str(inicio_semana),
+                "fin": str(fin_semana)
+            },
+            "total_minutos": total,
+            "total_horas": round(total / 60, 2),
+            "tareas": agrupado
         }
 
-        return func.HttpResponse(json.dumps(resultado, indent=2), mimetype="application/json")
+        return func.HttpResponse(json.dumps(respuesta, indent=2), mimetype="application/json")
 
     except Exception as e:
         return func.HttpResponse(
