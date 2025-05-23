@@ -93,7 +93,7 @@ def obtener_todas_las_tasks():
                 FROM WorkItems 
                 WHERE [System.WorkItemType] = 'Task' 
                   AND [System.TeamProject] = '{project}' 
-                  AND [System.ChangedDate] >= '{inicio_mes_iso}'
+                  AND [System.CreatedDate] >= '{inicio_mes_iso}'
             """
         }
 
@@ -105,7 +105,7 @@ def obtener_todas_las_tasks():
             return []
 
         work_items = response.json().get("workItems", [])
-        logging.info(f"WIQL ejecutado correctamente. {len(work_items)} tareas encontradas este mes.")
+        logging.info(f"WIQL ejecutado correctamente. {len(work_items)} tareas creadas este mes.")
         return [item["id"] for item in work_items]
 
     except Exception as e:
@@ -121,7 +121,7 @@ def obtener_todas_las_tasks():
         logging.error("Variables de entorno faltantes: AZURE_ORG, AZ_PROYECTO o DEVOPS_PAT")
         return []
     
-    logging.info(f"Consultando tareas con ChangedDate >= {inicio_mes_iso}")
+    logging.info(f"Consultando tareas con CreatedDateDate >= {inicio_mes_iso}")
 
     ahora = datetime.utcnow()
     inicio_mes = ahora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -139,7 +139,7 @@ def obtener_todas_las_tasks():
             FROM WorkItems 
             WHERE [System.WorkItemType] = 'Task' 
               AND [System.TeamProject] = '{project}' 
-              AND [System.ChangedDate] >= '{inicio_mes_iso}'
+              AND [System.CreatedDateDate] >= '{inicio_mes_iso}'
         """
     }
 
@@ -151,5 +151,5 @@ def obtener_todas_las_tasks():
         return []
 
     work_items = response.json().get("workItems", [])
-    logging.info(f"WIQL ejecutado correctamente. {len(work_items)} tareas encontradas desde mayo.")
+    logging.info(f"WIQL ejecutado correctamente. {len(work_items)} tareas creadas.")
     return [item["id"] for item in work_items]

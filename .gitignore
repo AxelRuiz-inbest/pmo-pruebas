@@ -7,3 +7,4 @@ __azurite_db_blob__.json
 *__.json
 __blobstorage__
 AzuriteConfig
+.env
