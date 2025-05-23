@@ -3,3 +3,7 @@ local.settings.json
 __pycache__/
 .venv/
 local.settings.json
+__azurite_db_blob__.json
+*__.json
+__blobstorage__
+AzuriteConfig
